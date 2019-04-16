@@ -1,0 +1,75 @@
+'''
+This program explains how to achieve multiprocessing from within multiprocessing, trying to achieve below schematic
+
+             _____P1_1
+      _P1___|_____P1_2
+     |      |_____P1_3
+     |       _____P2_1
+     |_P2___|_____P2_2
+     |      |_____P2_3
+MAIN |       _____P3_1
+-----|_P3___|_____P3_2
+     |      |_____P3_3
+     |       _____P4_1
+     |_P4___|_____P4_2
+            |_____P4_3
+
+'''
+import multiprocessing
+import os
+import time
+from multiprocessing.pool import Pool
+
+first_layer_thread_count = 4
+second_layer_thread_count = 3
+
+
+class WithoutDaemonProcess(multiprocessing.Process):
+    # make 'daemon' attribute always return False which is True By Default
+    def _get_daemon(self):
+        return False
+
+    def _set_daemon(self, value):
+        pass
+
+    daemon = property(_get_daemon, _set_daemon)
+
+
+class MyPool(multiprocessing.pool.Pool):
+    Process = WithoutDaemonProcess
+
+
+def final_work(item):
+    print(str(os.getppid()) + " : " + str(os.getpid()) + " : " + str(item))
+
+
+def work_for_parent_set(chunk):
+    time.sleep(1)  # Adding some time, mimicing the actual processing
+    print(str(os.getppid()) + " : " + str(os.getpid()) + " : " + str(chunk))
+    try:
+        #creating a pool of worker for this worker thread
+        sub_process_pool = MyPool(second_layer_thread_count)
+        for item in chunk:
+            sub_process_pool.apply_async(final_work, (item,))
+
+        sub_process_pool.close()  # no more requests can be submitted to this pool now
+        sub_process_pool.join()  # waiting for all the reponses to complete
+    except Exception as err:
+        print(err)
+
+
+def multi_proc():
+    process_pool = MyPool(first_layer_thread_count)
+    # now this pool has 'first_layer_thread_count' many worker thread"
+    lst = [[1, 2, 3], [4, 5, 6], [7, 8, 9], [10, 11, 12]]
+    for i in lst:
+        process_pool.apply_async(work_for_parent_set, (i,))
+
+    process_pool.close()
+    process_pool.join()
+
+    print("\n Done ! ! !")
+
+
+if __name__ == "__main__":
+    multi_proc()
